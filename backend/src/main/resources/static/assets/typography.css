@@ -1,0 +1,77 @@
+:root {
+  --type-body: 15px;
+  --type-supporting: 13px;
+  --type-table: 13px;
+  --type-label: 14px;
+  --type-control: 15px;
+  --type-nav: 14px;
+  --type-title: 30px;
+  --type-section: 18px;
+  --type-kpi: 25px;
+  --type-line: 1.5;
+  --type-text: #21382d;
+  --type-secondary: #4d6158;
+  --type-muted: #647a6f;
+}
+
+html, body { font-size: var(--type-body); }
+body { color: var(--type-text); line-height: var(--type-line); }
+p { color: var(--type-secondary); font-size: var(--type-supporting); line-height: var(--type-line); }
+small { color: var(--type-muted); font-size: 12px; line-height: 1.4; }
+label { color: var(--type-text); font-size: var(--type-label); font-weight: 600; line-height: 1.35; }
+input, select, textarea { color: var(--type-text); font-size: var(--type-control); line-height: 1.4; }
+input::placeholder, textarea::placeholder { color: #6e7e75; opacity: 1; }
+button, .button, a.dashboard-primary-action, a.order-secondary-action { font-size: 14px; font-weight: 600; line-height: 1.3; }
+
+table th, table td { font-size: inherit; }
+
+a, button, input, select, textarea { transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease; }
+
+h1, h2, h3, h4 { color: var(--ink); }
+h1 { font-size: var(--type-title); font-weight: 700; }
+h2 { font-size: var(--type-title); font-weight: 700; }
+h3 { font-size: var(--type-section); font-weight: 700; }
+.dashboard-breadcrumb, .crumb { color: var(--type-muted); font-size: 12px; font-weight: 700; letter-spacing: .5px; }
+.dashboard-topbar h1, .topbar b { font-size: 18px; font-weight: 700; }
+.dashboard-topbar-meta, .dashboard-status-dot + span { color: var(--type-secondary); font-size: 13px; }
+.dashboard-eyebrow, .eyebrow, .dashboard-nav-label { font-size: 12px; font-weight: 700; letter-spacing: .9px; }
+
+.dashboard-nav a, .dashboard-logout, .sidebar nav a { color: var(--type-secondary); font-size: var(--type-nav); font-weight: 600; }
+.dashboard-nav a.is-active, .dashboard-nav a:hover, .dashboard-logout:hover { color: var(--deep); }
+.sidebar-bottom p, .sidebar-bottom .badge { font-size: var(--type-supporting); }
+
+.dashboard-kpi p, .dashboard-kpi small, .dashboard-panel-link, .dashboard-panel-heading p { font-size: var(--type-supporting); }
+.dashboard-kpi strong { font-size: var(--type-kpi); font-weight: 700; }
+.dashboard-orders-table th, .orders-table th, .customers-table th, .services-table th, .reports-table th { color: #536d60; font-size: 12px; font-weight: 700; letter-spacing: .55px; }
+.dashboard-orders-table td, .orders-table td, .customers-table td, .services-table td { color: var(--type-text); font-size: var(--type-table); }
+.dashboard-orders-table td strong, .orders-table td strong, .customers-table td strong, .services-table td strong { font-weight: 600; }
+.dashboard-orders-table td small, .orders-table td small, .customers-table td small, .services-table td small { font-size: var(--type-supporting); }
+
+.order-form-heading h2, .customers-heading h2, .services-heading h2, .orders-heading h2, .order-detail-heading h2, .reports-heading h2 { font-size: var(--type-title); font-weight: 700; }
+.order-form-heading>div>p:last-child, .customers-heading>div>p:last-child, .services-heading>div>p:last-child, .orders-heading>div>p:last-child, .order-detail-heading>div>p:last-child, .reports-heading>div>p:last-child { font-size: var(--type-supporting); }
+.service-copy strong { font-size: 14px; font-weight: 700; }
+.service-copy b { font-size: 13px; font-weight: 700; }
+.service-copy small, .service-group h3, .primary-service small { font-size: 12px; }
+.service-quantity, .add-service { font-size: 13px; }
+.ticket-head, .line-service small, .billing-note { font-size: 13px; }
+
+.form-error, .success-message, .alert, .dashboard-empty, .list-empty { font-size: var(--type-supporting); line-height: var(--type-line); }
+.status, .service-status, .service-category-label, .dashboard-status-chip, .dashboard-payment-chip, .order-status-chip, .order-payment-chip { font-size: 12px; font-weight: 700; }
+
+.reports-page .reports-table td { font-size: 14px; }
+.reports-page .reports-table th { font-size: 12px; font-weight: 700; }
+.reports-page .reports-table td strong, .reports-page .reports-table td.reports-money { font-size: 14px; font-weight: 700; }
+.reports-page .reports-kpis span { font-size: 13px; }
+.reports-page .reports-kpis strong { font-size: 25px; font-weight: 700; }
+.reports-page .reports-kpis small { font-size: 12px; }
+.reports-page .report-card strong { font-size: 15px; font-weight: 700; }
+.reports-page .report-card small { font-size: 13px; }
+.reports-page .report-bars, .reports-page .report-bar-row { font-size: 13px; }
+
+@media (max-width: 700px) {
+  body { font-size: 14px; }
+  h1, h2, .order-form-heading h2, .customers-heading h2, .services-heading h2, .orders-heading h2, .order-detail-heading h2, .reports-heading h2 { font-size: 28px; }
+  input, select, textarea { font-size: 14px; }
+  .reports-page .reports-table td { font-size: 13px; }
+  .reports-page .reports-table td strong, .reports-page .reports-table td.reports-money { font-size: 13px; }
+}

@@ -51,6 +51,46 @@ class AdminWebFlowTest {
         mvc.perform(post("/logout").session(session).with(csrf())).andExpect(redirectedUrl("/login?logout"));
     }
 
+        @Test void reportsCenterAndReportRoutesRender() throws Exception {
+                mvc.perform(get("/reports").with(user("admin").roles("ADMIN")))
+                                .andExpect(status().isOk())
+                        .andExpect(content().string(org.hamcrest.Matchers.containsString("Reports Center")))
+                        .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/reports/sales-overview\"")));
+                for (String view : new String[] {"sales-overview", "daily-sales", "weekly-sales", "monthly-sales",
+                                "service-sales", "category-sales", "top-services", "payments", "outstanding", "customers",
+                                "order-status", "orders"}) {
+                        mvc.perform(get("/reports/" + view).with(user("admin").roles("ADMIN")))
+                                        .andExpect(status().isOk())
+                            .andExpect(content().string(org.hamcrest.Matchers.containsString("Back to Reports")))
+                                            .andExpect(content().string(org.hamcrest.Matchers.containsString("Download PDF")))
+                            .andExpect(content().string(org.hamcrest.Matchers.containsString("M19 19v-7")));
+                }
+                mvc.perform(get("/reports/daily-sales").with(user("admin").roles("ADMIN")))
+                        .andExpect(content().string(org.hamcrest.Matchers.containsString("Average daily sales")));
+                mvc.perform(get("/reports/service-sales").with(user("admin").roles("ADMIN")))
+                        .andExpect(content().string(org.hamcrest.Matchers.containsString("Total units")));
+                mvc.perform(get("/reports/payments").with(user("admin").roles("ADMIN")))
+                        .andExpect(content().string(org.hamcrest.Matchers.containsString("Number of payments")));
+                mvc.perform(get("/reports/orders").with(user("admin").roles("ADMIN")))
+                        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Gross sales"))));
+        }
+
+        @Test void reportPdfRoutesDownloadValidPdfWithSelectedDateRange() throws Exception {
+                for (String view : new String[] {"sales-overview", "daily-sales", "monthly-sales", "service-sales",
+                                "payments", "outstanding", "orders"}) {
+                        var response = mvc.perform(get("/reports/{view}/pdf", view)
+                                                        .param("from", "2026-09-01").param("to", "2026-09-24")
+                                                        .with(user("admin").roles("ADMIN")))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                                        .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".pdf")))
+                                        .andReturn().getResponse();
+                        assertThat(response.getContentAsByteArray()).startsWith((byte) '%', (byte) 'P', (byte) 'D', (byte) 'F');
+                }
+                mvc.perform(get("/reports/daily-sales/pdf").param("from", "2026-09-01").param("to", "2026-09-24"))
+                                .andExpect(status().is3xxRedirection());
+        }
+
     @Test void whatsappRetryRequiresAdminAndCsrf() throws Exception {
         mvc.perform(post("/orders/unknown/whatsapp/1/retry"))
                 .andExpect(status().isForbidden());

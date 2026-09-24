@@ -31,6 +31,18 @@ public interface LaundryOrderRepository extends JpaRepository<LaundryOrder, Long
 
     @EntityGraph(attributePaths = {"customer", "items"})
     List<LaundryOrder> findByWorkStatusInOrderByDeliveryAtAsc(Collection<OrderStatus> statuses);
+
+    @EntityGraph(attributePaths = {"customer", "items"})
+    @Query("""
+            select distinct o from LaundryOrder o
+            where o.placedAt >= :startAt and o.placedAt < :endAt
+              and o.workStatus not in :excluded
+            order by o.placedAt asc
+            """)
+    List<LaundryOrder> findSalesOrdersBetween(
+            @Param("startAt") Instant startAt,
+            @Param("endAt") Instant endAt,
+            @Param("excluded") Collection<OrderStatus> excluded);
     @EntityGraph(attributePaths = {"customer", "items"})
     @Query("""
             select distinct o from LaundryOrder o join o.customer c

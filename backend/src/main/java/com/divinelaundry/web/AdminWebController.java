@@ -441,25 +441,6 @@ public class AdminWebController {
     @GetMapping("/services")
     String services(Model model) { model.addAttribute("catalog", catalog.findAllByOrderByCategoryAscNameAsc()); return "services"; }
 
-        @GetMapping("/reports")
-        String reports(@RequestParam(required = false) LocalDate from,
-            @RequestParam(required = false) LocalDate to, Model model) {
-        LocalDate today = LocalDate.now(zone);
-        LocalDate reportFrom = from == null ? today.withDayOfMonth(1) : from;
-        LocalDate reportTo = to == null ? today : to;
-        if (reportTo.isBefore(reportFrom)) throw new IllegalArgumentException("Report end date must be on or after start date");
-        Instant start = reportFrom.atStartOfDay(zone).toInstant();
-        Instant end = reportTo.plusDays(1).atStartOfDay(zone).toInstant();
-        List<OrderStatus> excluded = List.of(OrderStatus.DRAFT, OrderStatus.CANCELLED);
-        BigDecimal sales = orders.sumSalesBetween(start, end, excluded);
-        long orderCount = orders.countSalesOrdersBetween(start, end, excluded);
-        BigDecimal averageBill = orderCount == 0 ? BigDecimal.ZERO
-            : sales.divide(BigDecimal.valueOf(orderCount), 2, java.math.RoundingMode.HALF_UP);
-        model.addAttribute("report", new SalesReportView(reportFrom, reportTo, sales, orderCount, averageBill,
-            orders.serviceSalesBetween(start, end, excluded)));
-        return "reports";
-        }
-
     private CustomerForm customerForm(Customer customer) {
         var form = new CustomerForm();
         form.setName(customer.getName());
@@ -473,6 +454,4 @@ public class AdminWebController {
         return form;
     }
 
-    record SalesReportView(LocalDate from, LocalDate to, BigDecimal grossSales, long orderCount,
-            BigDecimal averageBill, List<ServiceSalesRow> serviceSales) {}
 }

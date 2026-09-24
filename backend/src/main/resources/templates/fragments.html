@@ -3,7 +3,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="_csrf" th:content="${_csrf.token}"><meta name="_csrf_header" th:content="${_csrf.headerName}">
 <title th:text="${title} + ' · Divine Laundry'">Divine Laundry</title>
 <link rel="stylesheet" th:href="@{/assets/admin.css}">
+<link rel="stylesheet" th:href="@{/assets/reports.css}">
+<link rel="stylesheet" th:href="@{/assets/typography.css}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script defer th:src="@{/assets/service-image-registry.js}"></script>
 <script defer th:src="@{/assets/admin.js}"></script></head><body>
 <aside th:fragment="sidebar" class="sidebar">
 <a class="brand" th:href="@{/}"><span class="logo">D</span><span>Divine<small>Laundry Admin</small></span></a>

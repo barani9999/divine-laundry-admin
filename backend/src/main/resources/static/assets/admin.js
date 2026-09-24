@@ -190,41 +190,8 @@ if (orderForm) {
     if (label) label.textContent = 'Creating order...';
   });
   const format = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
-  const imageByCode = {
-    SHIRT_DRY: 'shirt.svg', TSHIRT_DRY_M: 'tshirt.svg', TSHIRT_DRY_W: 'tshirt.svg', TSHIRT_DRY_K: 'tshirt.svg',
-    VEST_DRY_M: 'vest.svg', UNDERWEAR_DRY_M: 'underwear.svg', PULLOVER_DRY_M: 'pullover.svg', PULLOVER_DRY_W: 'pullover.svg', PULLOVER_DRY_K: 'pullover.svg',
-    SWEATPANT_DRY_M: 'sweat-pants.svg', CAPRI_DRY_M: 'capri.svg', CAPRI_DRY_W: 'capri.svg', CAPRI_DRY_K: 'capri.svg',
-    PYJAMA_DRY_M: 'pyjama.svg', TRACKPANT_DRY_M: 'track-pant.svg', TRACKPANT_DRY_W: 'track-pant.svg', TRACKPANT_DRY_K: 'track-pant.svg',
-    SHORTS_DRY_M: 'shorts.svg', SHORTS_DRY_K: 'shorts.svg', LONGCOAT_DRY_M: 'long-coat.svg', LONGCOAT_DRY_W: 'long-coat.svg',
-    BLAZER_DRY_M: 'blazer.svg', BLAZER_DRY_W: 'blazer.svg', JEANS_DRY_M: 'jeans.svg', JEANS_DRY_W: 'jeans.svg', JEANS_DRY_K: 'jeans.svg',
-    TIE_DRY_M: 'tie.svg', TIE_DRY_A: 'tie.svg', SHERWANI_DRY_M: 'sherwani.svg', SHERWANI_DRY_K: 'sherwani.svg',
-    ACHKAN_DRY_M: 'blazer.svg', DANGREE_DRY_W: 'dress.svg', DANGREE_DRY_K: 'dress.svg', JUMPER_DRY_W: 'sweater.svg', JUMPER_DRY_K: 'sweater.svg',
-    HANDBAG_DRY_H: 'bag.svg', BABYBLANKET_DRY_K: 'blanket.svg',
-    SHIRT_IRON: 'shirt.svg', TSHIRT_IRON: 'tshirt.svg', PANT_IRON: 'trousers.svg', LONG_DRESS_IRON: 'dress.svg',
-    PILLOW_COVER_IRON: 'bedsheet.svg', COAT_BLAZER_IRON: 'blazer.svg', OVERCOAT_IRON: 'long-coat.svg',
-    TABLERUNNER_DRY_H: 'bedsheet.svg', FOOTMAT_DRY_H: 'bedsheet.svg', TABLEMAT_DRY_H: 'bedsheet.svg', BATHROBE_DRY_H: 'blanket.svg',
-    SOCKS_DRY_H: 'trousers.svg', HANDKERCHIEF_DRY_A: 'default-laundry.svg', RAINCOAT_DRY_A: 'long-coat.svg',
-    WASH_IRON_KG: 'washing.svg', WASH_FOLD_KG: 'washing.svg', WASH_FOLD_EXPRESS_KG: 'washing.svg', WASH_IRON_EXPRESS_KG: 'washing.svg',
-    SPORT_SHOE: 'shoe.svg', CANVAS_SHOE: 'shoe.svg', LEATHER_SHOE: 'shoe.svg', SUEDE_SHOE: 'shoe.svg', CROCS_SANDALS: 'shoe.svg', SLIPPERS: 'shoe.svg',
-    SOFA_SEAT: 'sofa.svg'
-  };
   const imageFor = (name = '', category = '', code = '') => {
-    const value = `${name} ${category} ${code}`.toLowerCase();
-    if (imageByCode[code]) return `/assets/service-images/${imageByCode[code]}`;
-    if (value.includes('sofa') || value.includes('upholstery')) return '/assets/service-images/sofa.svg';
-    if (value.includes('shoe')) return '/assets/service-images/shoe.svg';
-    if (value.includes('wash') || value.includes('kg')) return '/assets/service-images/washing.svg';
-    if (value.includes('iron')) return '/assets/service-images/iron.svg';
-    if (value.includes('blanket')) return '/assets/service-images/blanket.svg';
-    if (value.includes('curtain')) return '/assets/service-images/curtain.svg';
-    if (value.includes('bag') || value.includes('handbag')) return '/assets/service-images/bag.svg';
-    if (value.includes('jean')) return '/assets/service-images/jeans.svg';
-    if (value.includes('blazer') || value.includes('coat') || value.includes('achkan') || value.includes('sherwani')) return '/assets/service-images/blazer.svg';
-    if (value.includes('bed') || value.includes('bedsheet') || value.includes('duvet') || value.includes('quilt')) return '/assets/service-images/bedsheet.svg';
-    if (value.includes('saree') || value.includes('silk') || value.includes('dress')) return '/assets/service-images/saree.svg';
-    if (value.includes('t-shirt') || value.includes('tshirt')) return '/assets/service-images/tshirt.svg';
-    if (value.includes('pant') || value.includes('trouser')) return '/assets/service-images/trousers.svg';
-    if (value.includes('shirt') || value.includes('vest') || value.includes('pullover') || value.includes('jumper')) return '/assets/service-images/shirt.svg';
+    if (typeof window.resolveServiceImage === 'function') return window.resolveServiceImage(code, category, name);
     return '/assets/service-images/default-laundry.svg';
   };
   const catalog = document.getElementById('service-catalog');
@@ -418,7 +385,10 @@ if (orderForm) {
   document.querySelectorAll('[data-service-image]').forEach(image => {
     const card = image.closest('.service-card');
     image.onerror = () => { image.onerror = null; image.src = '/assets/service-images/default-laundry.svg'; };
-    image.src = imageFor(card.dataset.serviceName, `${card.dataset.serviceCategory} ${card.dataset.serviceGroup || ''}`, card.dataset.serviceCode);
+    const cardName = card?.dataset?.serviceName || '';
+    const cardCategory = card?.dataset?.serviceCategory || '';
+    const cardCode = card?.dataset?.serviceCode || '';
+    image.src = imageFor(cardName, cardCategory, cardCode);
   });
   renderCatalog();
   recalculate();
@@ -536,7 +506,8 @@ if (serviceCreateButtons.length) {
     card.dataset.serviceId = service.id; card.dataset.serviceCode = service.code;
     card.dataset.serviceName = service.name; card.dataset.serviceCategory = service.category;
     card.dataset.serviceGroup = service.group || ''; card.dataset.rate = service.rate; card.dataset.unit = service.unit;
-    card.innerHTML = `<span class="service-art"><img src="/assets/service-images/default-laundry.svg" alt=""></span><span class="service-copy"><small>${service.category} · ${service.code}</small><strong>${service.name}</strong><b>₹${service.rate} / ${unitLabel}</b></span><span class="service-footer"><span class="service-quantity" data-card-quantity>0</span><span class="add-service">＋ Add</span></span>`;
+    const fallbackImage = imageFor(service.name, service.category, service.code);
+    card.innerHTML = `<span class="service-art"><img src="${fallbackImage}" alt=""></span><span class="service-copy"><small>${service.category} · ${service.code}</small><strong>${service.name}</strong><b>₹${service.rate} / ${unitLabel}</b></span><span class="service-footer"><span class="service-quantity" data-card-quantity>0</span><span class="add-service">＋ Add</span></span>`;
     const target = service.category === 'Dry Clean'
       ? ([...document.querySelectorAll('#dry-service-catalog .service-group')].find(group => group.dataset.serviceGroup === (service.group || '')) || document.querySelector('#dry-service-catalog .service-group'))?.querySelector('.service-group-grid')
       : document.getElementById('direct-service-catalog');
