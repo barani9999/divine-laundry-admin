@@ -140,6 +140,9 @@ const paymentRequestForm = document.getElementById('online-payment-request-form'
 if (paymentRequestForm) {
   const feedback = document.getElementById('payment-request-feedback');
   const list = document.getElementById('payment-request-list');
+  const paymentPanel = paymentRequestForm.closest('.order-payment-request-panel');
+  const providerLabel = paymentPanel?.querySelector('.document-state');
+  const paymentDescription = paymentPanel?.querySelector(':scope > p');
   const orderNumber = location.pathname.split('/').filter(Boolean).pop();
   const amount = paymentRequestForm.elements.amount;
   const submit = paymentRequestForm.querySelector('button[type="submit"]');
@@ -151,14 +154,52 @@ if (paymentRequestForm) {
   });
   const renderRequests = requests => {
     if (!list) return;
-    list.innerHTML = requests.map(request => `<li><strong>${request.status}</strong> ₹${formatAmount(request.requestedAmount)}`
-      + (request.paymentUrl ? ` <a href="${request.paymentUrl}" target="_blank" rel="noreferrer">Payment link</a>` : '')
-      + '</li>').join('');
+    list.replaceChildren();
+    if (providerLabel && requests[0]?.provider) providerLabel.textContent = requests[0].provider;
+    requests.forEach(request => {
+      const item = document.createElement('li');
+      const summary = document.createElement('strong');
+      summary.textContent = `${request.status || 'UNKNOWN'}  INR ${formatAmount(request.requestedAmount)}`;
+      item.append(summary);
+      if (request.paymentRequestReference) {
+        const internalReference = document.createElement('small');
+        internalReference.textContent = `Request reference: ${request.paymentRequestReference}`;
+        item.append(internalReference);
+      }
+      if (request.providerReference) {
+        const reference = document.createElement('small');
+        reference.textContent = `Provider reference: ${request.providerReference}`;
+        item.append(reference);
+      }
+      if (request.providerPaymentId) {
+        const payment = document.createElement('small');
+        payment.textContent = `Payment reference: ${request.providerPaymentId}`;
+        item.append(payment);
+      }
+      if (request.paymentUrl && /^(https?:|mock-local:)/i.test(request.paymentUrl)) {
+        const link = document.createElement('a');
+        link.href = request.paymentUrl;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = 'Payment link';
+        item.append(link);
+      }
+      if (request.failureReason) {
+        const failure = document.createElement('small');
+        failure.textContent = request.failureReason;
+        item.append(failure);
+      }
+      list.append(item);
+    });
   };
-  fetch(`/api/orders/${encodeURIComponent(orderNumber)}/payment-requests`)
+  if (providerLabel) providerLabel.textContent = 'Configured payment provider';
+  if (paymentDescription) paymentDescription.textContent =
+    'Create a provider payment link for an exact amount. Payment remains pending until the signed provider webhook verifies collection.';
+  const loadPaymentRequests = () => fetch(`/api/orders/${encodeURIComponent(orderNumber)}/payment-requests`)
     .then(response => response.ok ? response.json() : [])
     .then(renderRequests)
     .catch(() => {});
+  loadPaymentRequests();
   paymentRequestForm.addEventListener('submit', event => {
     event.preventDefault();
     if (!amount.value || Number(amount.value) <= 0) return;
@@ -176,14 +217,43 @@ if (paymentRequestForm) {
       let body = {};
       try { body = rawBody ? JSON.parse(rawBody) : {}; } catch (_) {}
       if (!response.ok) throw new Error(body.message || body.error || rawBody || 'Unable to create payment request');
-      if (feedback) feedback.textContent = 'Payment request created. WhatsApp delivery will follow after the payment link is saved.';
-      renderRequests([body]);
+      if (feedback) feedback.textContent = 'Payment request created. Payment remains pending until provider verification succeeds.';
+      loadPaymentRequests();
     }).catch(error => { if (feedback) feedback.textContent = error.message; })
       .finally(() => { submit.disabled = false; });
   });
 }
 const orderForm = document.getElementById('order-form');
 if (orderForm) {
+  const shouldShowEmptyTicket = rows => {
+    if (!Array.isArray(rows) || rows.length === 0) return true;
+    return !rows.some(row => {
+      if (!row || typeof row.querySelector !== 'function') return false;
+      const service = row.querySelector('[data-service]');
+      return Boolean(service && service.value && String(service.value).trim().length > 0);
+    });
+  };
+  const syncPieceQuantityFields = row => {
+    if (!row || typeof row.querySelector !== 'function') return false;
+    const select = row.querySelector('[data-service]');
+    const quantity = row.querySelector('[data-quantity]');
+    const pieces = row.querySelector('[data-pieces]');
+    if (!select || !quantity || !pieces) return false;
+    if (select.selectedOptions[0]?.dataset?.unit !== 'PIECE') return false;
+    const piecesValue = Number(pieces.value) || 0;
+    const quantityValue = Number(quantity.value) || 0;
+    const baseValue = piecesValue > 0 ? piecesValue : quantityValue;
+    const safeValue = Math.max(0, Math.round(baseValue));
+    if (Number(quantity.value) !== safeValue || Number(pieces.value) !== safeValue) {
+      quantity.value = String(safeValue);
+      pieces.value = String(safeValue);
+      return true;
+    }
+    return false;
+  };
+  const normalizePieceFields = row => {
+    return syncPieceQuantityFields(row);
+  };
   const body = document.getElementById('line-items');
   orderForm.addEventListener('submit', () => {
     const label = orderForm.querySelector('[data-order-submit-label]');
@@ -253,6 +323,7 @@ if (orderForm) {
     const fallback = '/assets/service-images/default-laundry.svg';
     const lineImage = row.querySelector('[data-line-image]');
     lineImage.onerror = () => { lineImage.onerror = null; lineImage.src = fallback; };
+    lineImage.alt = name;
     lineImage.src = imageFor(name, option?.dataset.category, option?.dataset.code);
     row.classList.toggle('has-service', Boolean(name));
   };
@@ -277,6 +348,7 @@ if (orderForm) {
   const recalculate = () => {
     let cents = 0;
     body.querySelectorAll('.order-line').forEach(row => {
+      normalizePieceFields(row);
       const option = row.querySelector('[data-service]').selectedOptions[0];
       const quantity = Number(row.querySelector('[data-quantity]').value) || 0;
       const lineCents = Math.round((Number(option?.dataset.rate) || 0) * quantity * 100 + 1e-8);
@@ -287,7 +359,8 @@ if (orderForm) {
     const discount = Number(orderForm.elements.discount.value) || 0;
     const tax = Number(orderForm.elements.tax.value) || 0;
     document.getElementById('estimated-total').textContent = format(Math.round(cents / 100 - discount + tax));
-    document.getElementById('empty-ticket').hidden = body.children.length > 0 && [...body.children].some(row => row.querySelector('[data-service]').value);
+    const orderLines = [...body.querySelectorAll('.order-line')];
+    document.getElementById('empty-ticket').hidden = !shouldShowEmptyTicket(orderLines);
     syncCardQuantities();
   };
   const selectService = card => {
@@ -332,6 +405,12 @@ if (orderForm) {
     const current = Number(input.value) || min;
     const next = button.dataset.step === 'up' ? current + step : current - step;
     input.value = String(Math.min(max, Math.max(min, Number(next.toFixed(3)))));
+    if (button.dataset.target === 'quantity' && row.querySelector('[data-service]')?.selectedOptions[0]?.dataset.unit === 'PIECE') {
+      row.querySelector('[data-pieces]').value = input.value;
+    }
+    if (button.dataset.target === 'pieces' && row.querySelector('[data-service]')?.selectedOptions[0]?.dataset.unit === 'PIECE') {
+      row.querySelector('[data-quantity]').value = input.value;
+    }
     input.dispatchEvent(new Event('input', { bubbles: true }));
   };
   document.querySelectorAll('.service-card').forEach(card => card.addEventListener('click', () => selectService(card)));
@@ -388,6 +467,7 @@ if (orderForm) {
     const cardName = card?.dataset?.serviceName || '';
     const cardCategory = card?.dataset?.serviceCategory || '';
     const cardCode = card?.dataset?.serviceCode || '';
+    image.alt = cardName;
     image.src = imageFor(cardName, cardCategory, cardCode);
   });
   renderCatalog();

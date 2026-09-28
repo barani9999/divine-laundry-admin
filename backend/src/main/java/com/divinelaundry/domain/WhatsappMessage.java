@@ -104,6 +104,27 @@ public class WhatsappMessage {
         this.lastError = abbreviate(error);
     }
 
+    public void applyProviderStatus(WhatsappDeliveryStatus providerStatus, String error) {
+        if (providerStatus == null || providerStatus == WhatsappDeliveryStatus.WAITING_FOR_PROVIDER
+                || providerStatus == WhatsappDeliveryStatus.PENDING) {
+            throw new IllegalArgumentException("A provider delivery status is required");
+        }
+        if (deliveryStatus == WhatsappDeliveryStatus.READ || deliveryStatus == WhatsappDeliveryStatus.FAILED) {
+            return;
+        }
+        if (deliveryStatus == WhatsappDeliveryStatus.DELIVERED
+                && providerStatus != WhatsappDeliveryStatus.READ) {
+            return;
+        }
+
+        this.deliveryStatus = providerStatus;
+        if (providerStatus == WhatsappDeliveryStatus.FAILED) {
+            this.lastError = abbreviate(error);
+        } else {
+            this.lastError = null;
+        }
+    }
+
     private void requirePending() {
         if (deliveryStatus != WhatsappDeliveryStatus.PENDING) {
             throw new IllegalStateException("Only pending WhatsApp messages can change delivery outcome");
@@ -118,7 +139,8 @@ public class WhatsappMessage {
 
     public boolean isDeliveredOrSent() {
         return deliveryStatus == WhatsappDeliveryStatus.SENT
-                || deliveryStatus == WhatsappDeliveryStatus.DELIVERED;
+                || deliveryStatus == WhatsappDeliveryStatus.DELIVERED
+                || deliveryStatus == WhatsappDeliveryStatus.READ;
     }
 
     private static String abbreviate(String value) {

@@ -223,6 +223,10 @@ public class PaymentRequestService {
         if (verification.requestedAmount() != null && verification.requestedAmount().compareTo(request.getRequestedAmount()) != 0) {
             throw new IllegalStateException("Provider amount mismatch for payment request");
         }
+        if (verification.paidAmount() == null
+                || verification.paidAmount().compareTo(request.getRequestedAmount()) != 0) {
+            throw new IllegalStateException("Verified paid amount mismatch for payment request");
+        }
         if (verification.currency() == null || !verification.currency().equalsIgnoreCase(request.getCurrency())) {
             throw new IllegalStateException("Provider currency mismatch for payment request");
         }
@@ -233,7 +237,8 @@ public class PaymentRequestService {
             }
         }
 
-        paymentService.record(new PaymentService.RecordPaymentCommand(
+        return inTransaction(() -> {
+            paymentService.record(new PaymentService.RecordPaymentCommand(
                 request.getIdempotencyKey(),
                 orderNumber,
                 PaymentMode.UPI,
@@ -241,14 +246,11 @@ public class PaymentRequestService {
                 amount,
                 Instant.now(),
                 actor));
-
-        PaymentRequest updated = inTransaction(() -> {
             PaymentRequest persisted = requests.findById(request.getId()).orElse(request);
             persisted.markPaid(verification.providerPaymentId());
             PaymentRequest saved = requests.save(persisted);
             return saved == null ? persisted : saved;
         });
-        return updated;
     }
 
     public List<PaymentRequest> findByOrderNumber(String orderNumber) {

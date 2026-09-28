@@ -63,6 +63,7 @@ public class PaymentRequestController {
 
     public record PaymentRequestResponse(
             String orderNumber,
+            String paymentRequestReference,
             String provider,
             String providerReference,
             String providerPaymentId,
@@ -76,6 +77,7 @@ public class PaymentRequestController {
         static PaymentRequestResponse from(PaymentRequest request) {
             return new PaymentRequestResponse(
                     request.getOrderNumber(),
+                    request.getIdempotencyKey(),
                     request.getProvider(),
                     request.getProviderReference(),
                     request.getProviderPaymentId(),

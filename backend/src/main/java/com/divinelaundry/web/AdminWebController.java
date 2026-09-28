@@ -93,11 +93,13 @@ public class AdminWebController {
 
     @GetMapping("/")
     String dashboard(Model model) {
+        LocalDate businessDate = LocalDate.now(zone);
         model.addAttribute("customerCount", customers.count());
         model.addAttribute("orderCount", orders.count());
         model.addAttribute("recentOrders", orders.findTop50ByOrderByPlacedAtDesc());
-        Instant start = LocalDate.now(zone).atStartOfDay(zone).toInstant();
-        Instant end = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant();
+        Instant start = businessDate.atStartOfDay(zone).toInstant();
+        Instant end = businessDate.plusDays(1).atStartOfDay(zone).toInstant();
+        model.addAttribute("businessDate", businessDate);
         model.addAttribute("dashboard", new DashboardMetrics(
             orders.countSalesOrdersBetween(start, end, List.of(OrderStatus.DRAFT, OrderStatus.CANCELLED)),
             orders.countByWorkStatusIn(IN_PROCESS), orders.countByWorkStatus(OrderStatus.READY),
@@ -276,7 +278,7 @@ public class AdminWebController {
     String retryWhatsapp(@PathVariable String number, @PathVariable Long messageId, RedirectAttributes redirect) {
         try {
             whatsapp.retry(number, messageId);
-            redirect.addFlashAttribute("success", "WhatsApp message retry completed.");
+            redirect.addFlashAttribute("success", "New WhatsApp delivery attempt queued. Awaiting Meta webhook status.");
         } catch (IllegalArgumentException | IllegalStateException ex) {
             redirect.addFlashAttribute("error", ex.getMessage());
         }
@@ -331,21 +333,33 @@ public class AdminWebController {
 
     record WhatsappMetrics(long pending, long failed, long sent, long delivered) {}
 
-    record WhatsappMessageView(Long id, String type, String recipientPhone, String status,
-            String failureClassification, int attemptCount, Instant createdAt, Instant sentAt,
-            Instant claimedAt, String providerMessageId, boolean retryable) {}
+            record WhatsappMessageView(Long id, String type, String recipientPhone, String status,
+                String failureClassification, boolean ecosystemProtection, int attemptCount, Instant createdAt,
+            Instant sentAt, Instant claimedAt, String providerMessageId, boolean retryable) {}
 
     private static WhatsappMessageView whatsappMessageView(WhatsappMessage message) {
         String key = message.getDeduplicationKey();
         String type = key.startsWith("INVOICE_IMAGE:") ? "Invoice Image"
             : key.startsWith("INVOICE_PDF:") ? "Invoice PDF"
             : key.startsWith("RECEIPT_PDF:") ? "Payment Receipt PDF" : "WhatsApp Message";
+        String status = displayWhatsappStatus(message.getDeliveryStatus());
+        String diagnostic = message.getDeliveryStatus() == WhatsappDeliveryStatus.FAILED
+                ? message.getLastError() : null;
+        boolean ecosystemProtection = diagnostic != null && diagnostic.contains("131049");
+        if (ecosystemProtection) {
+            diagnostic = diagnostic + " Meta rejected this delivery for ecosystem-engagement protection; do not retry immediately.";
+        }
         return new WhatsappMessageView(message.getId(), type, maskPhone(message.getRecipientPhone()),
-            message.getDeliveryStatus().name(), message.getDeliveryStatus() == WhatsappDeliveryStatus.FAILED
-                ? message.getLastError() : null, message.getAttemptCount(), message.getCreatedAt(),
+            status, diagnostic, ecosystemProtection, message.getAttemptCount(), message.getCreatedAt(),
             message.getSentAt(), message.getClaimedAt(), message.getProviderMessageId(),
-            message.getDeliveryStatus() == WhatsappDeliveryStatus.FAILED);
+            message.getDeliveryStatus() == WhatsappDeliveryStatus.FAILED && !ecosystemProtection);
     }
+
+            private static String displayWhatsappStatus(WhatsappDeliveryStatus status) {
+            if (status == null) return "UNKNOWN";
+            return status == WhatsappDeliveryStatus.PENDING || status == WhatsappDeliveryStatus.WAITING_FOR_PROVIDER
+                ? "QUEUED" : status.name();
+            }
 
     private static String maskPhone(String phone) {
         if (phone == null || phone.length() <= 4) return "****";

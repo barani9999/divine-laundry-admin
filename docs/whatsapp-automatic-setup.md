@@ -75,6 +75,8 @@ WHATSAPP_GRAPH_BASE_URL=https://graph.facebook.com
 WHATSAPP_GRAPH_API_VERSION=current-supported-version
 WHATSAPP_PHONE_NUMBER_ID=meta-phone-number-id
 WHATSAPP_ACCESS_TOKEN=production-system-user-token
+WHATSAPP_APP_SECRET=meta-app-secret
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=private-webhook-verification-token
 WHATSAPP_TEMPLATE_NAME=laundry_invoice_payment
 WHATSAPP_TEMPLATE_LANGUAGE=en
 WHATSAPP_DOCUMENT_TEMPLATE_NAME=approved-document-template
@@ -107,9 +109,17 @@ WhatsApp delivery uses a database-backed claim with a 15-minute stale-`PENDING` 
 5. Confirm `SENT` means Meta accepted the request; it does not prove customer delivery.
 6. Confirm failed messages can be retried manually and successful messages are not sent again.
 
+## Public delivery-status webhook
+
+Configure Meta's webhook callback URL as `https://<public-host>/api/webhooks/whatsapp` and subscribe to WhatsApp message status updates. The GET verification challenge uses `WHATSAPP_WEBHOOK_VERIFY_TOKEN`; POST notifications require a valid `X-Hub-Signature-256` signature using `WHATSAPP_APP_SECRET`.
+
+The local app at `http://localhost:8080` is not reachable by Meta. To test real callbacks while developing locally, expose the app through a public HTTPS tunnel and configure that public URL in Meta, or deploy to a public HTTPS host. Until Meta can reach and verify that callback, local HTTP 200 send results only confirm provider acceptance; they do not test delivered, read, or failed status callbacks.
+
+Status events are matched to the stored provider message ID and map to `SENT`, `DELIVERED`, `READ`, or `FAILED`. The application logs a masked provider ID, event status and timestamp, and the mapped internal message/order reference. It does not log the callback body, customer phone, access token, or provider credentials.
+
 `WHATSAPP_PENDING_TIMEOUT` must be a positive ISO-8601 duration. Its default is `PT15M`.
 
-This phase has no Meta webhook integration, so delivery and read tracking are not available. `DELIVERED` must not be treated as provider-confirmed until webhook support is added in a later phase.
+Delivery and read tracking depend on Meta reaching the public HTTPS webhook described above. `DELIVERED` must not be inferred from the send API's HTTP 200 response.
 
 ## Delivery claim limitation
 

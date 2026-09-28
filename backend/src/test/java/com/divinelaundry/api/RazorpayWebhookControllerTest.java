@@ -84,4 +84,30 @@ class RazorpayWebhookControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(service).confirmVerifiedPayment(eq("SO-2026-000101"), eq("plink_123"), eq(new BigDecimal("1000.00")), eq("INR"), eq("razorpay-webhook"));
     }
+
+        @Test
+        void providerReferenceMismatchIsRejectedWithoutConfirmingPayment() throws Exception {
+        PaymentRequestService service = Mockito.mock(PaymentRequestService.class);
+        PaymentRequestRepository repository = Mockito.mock(PaymentRequestRepository.class);
+        RazorpayWebhookController controller = new RazorpayWebhookController(service, repository,
+            new ObjectMapper(), "webhook-secret");
+        Customer customer = new Customer("Test Customer", "9000000000", null, "Trichy");
+        LaundryOrder order = new LaundryOrder("client-order-reference-mismatch", customer, null, null, "admin");
+        order.assignOrderNumber("SO-2026-000102");
+        PaymentRequest request = new PaymentRequest(order, new BigDecimal("1000.00"), "INR", "razorpay",
+            "admin", "req-reference-mismatch");
+        request.setStatus(PaymentRequestStatus.PENDING);
+        request.setProviderReference("plink_expected");
+        String payload = "{\"event\":\"payment_link.paid\",\"payload\":{\"payment_link\":{\"entity\":{"
+            + "\"id\":\"plink_wrong\",\"reference_id\":\"req-reference-mismatch\","
+            + "\"amount\":100000,\"currency\":\"INR\"}},\"payment\":{\"entity\":{"
+            + "\"id\":\"pay_wrong\",\"amount\":100000,\"currency\":\"INR\",\"status\":\"captured\"}}}}";
+        when(repository.findByIdempotencyKey("req-reference-mismatch")).thenReturn(java.util.Optional.of(request));
+
+        ResponseEntity<?> response = controller.handle(payload.getBytes(),
+            RazorpayWebhookController.computeSignature(payload.getBytes(), "webhook-secret"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(service, never()).confirmVerifiedPayment(any(), any(), any(), any(), any());
+        }
 }

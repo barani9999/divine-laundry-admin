@@ -26,12 +26,15 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
                     HttpMethod.POST.matches(request.getMethod())
-                        && "/api/webhooks/razorpay".equals(request.getRequestURI())))
+                        && ("/api/webhooks/razorpay".equals(request.getRequestURI())
+                            || "/api/webhooks/whatsapp".equals(request.getRequestURI()))))
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/login", "/assets/**", "/error", "/api/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/razorpay").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/webhooks/whatsapp").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/whatsapp").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/orders/*/payment-requests").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/orders/*/payment-requests").hasRole("ADMIN")
                         .anyRequest().hasRole("ADMIN"))

@@ -9,6 +9,7 @@ import com.divinelaundry.domain.PaymentMode;
 import com.divinelaundry.domain.PricingUnit;
 import com.divinelaundry.domain.WhatsappMessage;
 import com.divinelaundry.repository.LaundryOrderRepository;
+import com.divinelaundry.repository.PaymentRequestRepository;
 import com.divinelaundry.repository.WhatsappMessageRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -179,6 +180,27 @@ class WhatsappServiceTest {
     }
 
     @Test
+    void paymentRequestWhatsappFailureDoesNotChangePaymentRequestState() {
+        PaymentRequestRepository paymentRequests = mock(PaymentRequestRepository.class);
+        WhatsappService whatsapp = mock(WhatsappService.class);
+        LaundryOrder order = invoicedOrder("request-whatsapp-failure", "INV-2026-000010");
+        PaymentRequest request = new PaymentRequest(order, new BigDecimal("100.00"), "INR",
+                "razorpay", "admin", "req-whatsapp-failure");
+        request.markPending("plink_failure", Instant.now().plusSeconds(600));
+        when(paymentRequests.findByIdempotencyKey("req-whatsapp-failure")).thenReturn(Optional.of(request));
+        doThrow(new IllegalStateException("WhatsApp unavailable"))
+                .when(whatsapp).sendPaymentRequest(request, BigDecimal.ZERO);
+
+        WhatsappAutomationListener listener = new WhatsappAutomationListener(whatsapp, paymentRequests);
+        listener.paymentRequestCreated(new PaymentRequestCreatedEvent(
+                order.getOrderNumber(), "req-whatsapp-failure", BigDecimal.ZERO));
+
+        assertThat(request.getStatus()).isEqualTo(com.divinelaundry.domain.PaymentRequestStatus.PENDING);
+        assertThat(request.getProviderPaymentId()).isNull();
+        verify(whatsapp).sendPaymentRequest(request, BigDecimal.ZERO);
+    }
+
+    @Test
     void classifiedProviderFailureIsPersistedSafelyAndFailedRetryCanSucceed() {
         WhatsappMessageRepository messages = mock(WhatsappMessageRepository.class);
         LaundryOrderRepository orders = mock(LaundryOrderRepository.class);
@@ -244,6 +266,77 @@ class WhatsappServiceTest {
                 .isInstanceOf(IllegalStateException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.retry(order.getOrderNumber(), 2L))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void failedRetryCreatesNewAttemptAndPreservesOriginalFailure() {
+        WhatsappMessageRepository messages = mock(WhatsappMessageRepository.class);
+        LaundryOrderRepository orders = mock(LaundryOrderRepository.class);
+        InvoicePaymentImageService images = mock(InvoicePaymentImageService.class);
+        DocumentService documents = mock(DocumentService.class);
+        WhatsappCloudApiClient provider = mock(WhatsappCloudApiClient.class);
+        WhatsappMessageClaimService claims = mock(WhatsappMessageClaimService.class);
+        LaundryOrder order = invoicedOrder("retry-new-attempt", "INV-2026-000008");
+        WhatsappMessage failed = new WhatsappMessage("INVOICE_IMAGE:INV-2026-000008", order,
+                order.getCustomer().getPhone(), "image-template");
+        failed.markPending();
+        failed.markSent("media-old", "wamid.old");
+        failed.applyProviderStatus(com.divinelaundry.domain.WhatsappDeliveryStatus.FAILED,
+                "Meta error code=131047 message=temporary rejection");
+        AtomicReference<WhatsappMessage> created = new AtomicReference<>();
+        when(messages.findByIdAndOrder_OrderNumber(7L, order.getOrderNumber())).thenReturn(Optional.of(failed));
+        when(orders.findByOrderNumber(order.getOrderNumber())).thenReturn(Optional.of(order));
+        when(messages.findByDeduplicationKey(anyString())).thenAnswer(invocation ->
+                invocation.getArgument(0).equals(failed.getDeduplicationKey()) ? Optional.of(failed) : Optional.empty());
+        when(messages.saveAndFlush(any(WhatsappMessage.class))).thenAnswer(invocation -> {
+            WhatsappMessage value = invocation.getArgument(0);
+            created.set(value);
+            return value;
+        });
+        when(messages.save(any(WhatsappMessage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(provider.isConfigured()).thenReturn(true);
+        when(claims.claim(anyString())).thenAnswer(invocation -> {
+            WhatsappMessage value = created.get();
+            value.markPending();
+            return Optional.of(value);
+        });
+        DocumentService.DocumentBundle document = new DocumentService.DocumentBundle(null, order,
+                new PaymentService.PaymentSummary(order, BigDecimal.ZERO, order.getTotal(), List.of()), List.of());
+        when(documents.document(order.getOrderNumber())).thenReturn(document);
+        when(images.render(document)).thenReturn(new byte[]{1});
+        when(provider.sendInvoiceAndPaymentImage(anyString(), any(), anyString(), any()))
+                .thenReturn(new WhatsappCloudApiClient.DeliveryResult("media-new", "wamid.new"));
+
+        WhatsappService service = new WhatsappService(messages, orders, documents, images,
+                mock(PdfInvoiceService.class), mock(PaymentReceiptService.class), mock(PdfReceiptService.class),
+                provider, properties(), claims, new WhatsappMessagePersistenceService(messages));
+
+        WhatsappMessage retry = service.retry(order.getOrderNumber(), 7L);
+
+        assertThat(retry.getDeduplicationKey()).isNotEqualTo(failed.getDeduplicationKey());
+        assertThat(retry.getDeliveryStatus()).isEqualTo(com.divinelaundry.domain.WhatsappDeliveryStatus.SENT);
+        assertThat(failed.getDeliveryStatus()).isEqualTo(com.divinelaundry.domain.WhatsappDeliveryStatus.FAILED);
+        assertThat(failed.getLastError()).contains("131047");
+        verify(provider).sendInvoiceAndPaymentImage(anyString(), any(), anyString(), any());
+    }
+
+    @Test
+    void ecosystemProtectionFailureCannotBeRetriedImmediately() {
+        WhatsappMessageRepository messages = mock(WhatsappMessageRepository.class);
+        LaundryOrder order = invoicedOrder("retry-ecosystem", "INV-2026-000009");
+        WhatsappMessage failed = new WhatsappMessage("INVOICE_IMAGE:INV-2026-000009", order,
+                order.getCustomer().getPhone(), "image-template");
+        failed.markPending();
+        failed.markFailed("Meta error code=131049 details=ecosystem protection");
+        when(messages.findByIdAndOrder_OrderNumber(8L, order.getOrderNumber())).thenReturn(Optional.of(failed));
+        WhatsappService service = new WhatsappService(messages, mock(LaundryOrderRepository.class),
+                mock(DocumentService.class), mock(InvoicePaymentImageService.class), mock(PdfInvoiceService.class),
+                mock(PaymentReceiptService.class), mock(PdfReceiptService.class), mock(WhatsappCloudApiClient.class),
+                properties(), mock(WhatsappMessageClaimService.class), new WhatsappMessagePersistenceService(messages));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.retry(order.getOrderNumber(), 8L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ecosystem-engagement protection");
     }
 
     @Test

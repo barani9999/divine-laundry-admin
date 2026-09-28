@@ -190,6 +190,8 @@ WHATSAPP_GRAPH_BASE_URL=https://graph.facebook.com
 WHATSAPP_GRAPH_API_VERSION=<supported Graph API version>
 WHATSAPP_PHONE_NUMBER_ID=<Meta phone number id>
 WHATSAPP_ACCESS_TOKEN=<Meta system-user token>
+WHATSAPP_APP_SECRET=<Meta app secret for webhook signature verification>
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=<private token chosen for Meta webhook verification>
 WHATSAPP_TEMPLATE_NAME=laundry_invoice_payment
 WHATSAPP_TEMPLATE_LANGUAGE=en
 WHATSAPP_DOCUMENT_TEMPLATE_NAME=<approved document template>
@@ -197,6 +199,8 @@ WHATSAPP_DOCUMENT_TEMPLATE_LANGUAGE=en
 ```
 
 `RAZORPAY_ENABLED=false` keeps the safe provider behavior. Set it to `true` only for the existing Razorpay Test Mode flow with Test Mode credentials. WhatsApp remains disabled until its official Cloud API configuration and approved templates are ready. The current code does not consume `WHATSAPP_PROVIDER`, `WHATSAPP_API_URL`, or `WHATSAPP_BUSINESS_ACCOUNT_ID`; use `WHATSAPP_GRAPH_BASE_URL` and the variables above.
+
+Configure the Meta webhook callback URL as `https://<public-host>/api/webhooks/whatsapp`, subscribe to WhatsApp message status updates, and set the verification token to `WHATSAPP_WEBHOOK_VERIFY_TOKEN`. The callback verifies `X-Hub-Signature-256` with `WHATSAPP_APP_SECRET`; provider statuses update the existing WhatsApp message by its `wamid`. Meta cannot call `localhost:8080`; local webhook testing requires exposing the running app through a public HTTPS tunnel or deploying it to a public HTTPS host. A local send returning HTTP 200 does not validate callback delivery.
 
 ### MySQL and Flyway
 

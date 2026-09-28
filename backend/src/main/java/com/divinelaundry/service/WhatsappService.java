@@ -124,12 +124,32 @@ public class WhatsappService {
         if (message.getDeliveryStatus() != com.divinelaundry.domain.WhatsappDeliveryStatus.FAILED) {
             throw new IllegalStateException("Only failed WhatsApp messages can be retried");
         }
+        if (isEcosystemProtectionFailure(message)) {
+            throw new IllegalStateException("Meta rejected this message for ecosystem-engagement protection. Do not retry immediately.");
+        }
+        LaundryOrder order = requiredInvoicedOrder(orderNumber);
         String key = message.getDeduplicationKey();
-        if (key.startsWith("INVOICE_IMAGE:")) return queueInvoice(orderNumber);
-        if (key.startsWith("INVOICE_PDF:")) return queueInvoicePdf(orderNumber);
-        if (key.startsWith("RECEIPT_PDF:")) return sendPaymentUpdate(orderNumber, key.substring("RECEIPT_PDF:".length()));
+        String retryKey = retryKey(key);
+        if (key.startsWith("INVOICE_IMAGE:")) return deliver(order, retryKey);
+        if (key.startsWith("INVOICE_PDF:")) {
+            DocumentService.DocumentBundle document = documents.document(orderNumber);
+            return deliverDocument(order, retryKey, pdfInvoices.render(document), order.getInvoiceNumber() + ".pdf",
+                    new WhatsappCloudApiClient.TemplateValues(
+                            order.getCustomer().getName(), order.getInvoiceNumber(), order.getOrderNumber(),
+                            order.getTotal(), document.paymentSummary().amountPaid(), document.paymentSummary().balance()));
+        }
+        if (key.startsWith("RECEIPT_PDF:")) {
+            String paymentNumber = key.substring("RECEIPT_PDF:".length());
+            PaymentReceiptService.PaymentReceiptDocument receipt = paymentReceipts.document(orderNumber, paymentNumber);
+            return deliverDocument(order, retryKey, pdfReceipts.render(receipt), paymentNumber + ".pdf",
+                    new WhatsappCloudApiClient.TemplateValues(
+                            receipt.customerName(), receipt.receiptNumber(), receipt.orderNumber(),
+                            receipt.orderTotal(), receipt.amountReceived(), receipt.remainingOutstanding()));
+        }
         if (key.startsWith("PAYMENT_CONFIRMATION:")) {
-            return sendPaymentConfirmation(orderNumber, key.substring("PAYMENT_CONFIRMATION:".length()));
+            PaymentReceiptService.PaymentReceiptDocument receipt = paymentReceipts.document(orderNumber,
+                    key.substring("PAYMENT_CONFIRMATION:".length()));
+            return deliverText(order, retryKey, paymentConfirmation(receipt));
         }
         if (key.startsWith("PAYMENT_REQUEST:")) {
             if (paymentRequests == null) throw new IllegalStateException("Payment request retry is unavailable");
@@ -137,9 +157,21 @@ public class WhatsappService {
             PaymentRequest request = paymentRequests.findByIdempotencyKey(
                 key.substring("PAYMENT_REQUEST:".length()))
                 .orElseThrow(() -> new IllegalArgumentException("Payment request not found"));
-            return sendPaymentRequest(request, paymentService.summary(orderNumber).amountPaid());
+            BigDecimal amountPaidBefore = paymentService.summary(orderNumber).amountPaid();
+            BigDecimal balanceAfter = order.getTotal().subtract(amountPaidBefore)
+                    .subtract(request.getRequestedAmount()).max(BigDecimal.ZERO);
+            return deliverText(order, retryKey, paymentRequestMessage(order, request, amountPaidBefore, balanceAfter));
         }
         throw new IllegalStateException("Unsupported WhatsApp message type");
+    }
+
+    private static String retryKey(String originalKey) {
+        String prefix = originalKey.length() > 80 ? originalKey.substring(0, 80) : originalKey;
+        return prefix + ":RETRY:" + java.util.UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static boolean isEcosystemProtectionFailure(WhatsappMessage message) {
+        return message.getLastError() != null && message.getLastError().contains("131049");
     }
 
     private WhatsappMessage deliverText(LaundryOrder order, String deduplicationKey, String text) {

@@ -14,6 +14,8 @@ public interface WhatsappMessageRepository extends JpaRepository<WhatsappMessage
     @EntityGraph(attributePaths = {"order", "order.customer"})
     Optional<WhatsappMessage> findByDeduplicationKey(String deduplicationKey);
 
+    Optional<WhatsappMessage> findByProviderMessageId(String providerMessageId);
+
     @EntityGraph(attributePaths = {"order", "order.customer"})
     Optional<WhatsappMessage> findById(Long id);
 
@@ -33,7 +35,7 @@ public interface WhatsappMessageRepository extends JpaRepository<WhatsappMessage
                attempt_count = attempt_count + 1,
                last_error = NULL
              WHERE deduplication_key = :deduplicationKey
-               AND delivery_status NOT IN ('SENT', 'DELIVERED')
+               AND delivery_status NOT IN ('SENT', 'DELIVERED', 'READ')
                AND (delivery_status <> 'PENDING'
                 OR claimed_at IS NULL
                 OR claimed_at <= :staleBefore)

@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -26,6 +28,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/webhooks")
 public class RazorpayWebhookController {
+    private static final Logger log = LoggerFactory.getLogger(RazorpayWebhookController.class);
     private final PaymentRequestService paymentRequestService;
     private final PaymentRequestRepository paymentRequests;
     private final ObjectMapper objectMapper;
@@ -107,10 +110,14 @@ public class RazorpayWebhookController {
 
         String paymentLinkIdFromEntity = textValue(paymentEntity, "payment_link_id");
         if (StringUtils.hasText(paymentLinkIdFromEntity) && !providerReference.equals(paymentLinkIdFromEntity)) {
+            log.warn("Razorpay payment rejected: payload provider reference mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "provider_reference_mismatch"));
         }
         if (StringUtils.hasText(request.getProviderReference())
                 && !request.getProviderReference().equals(providerReference)) {
+            log.warn("Razorpay payment rejected: stored provider reference mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "provider_reference_mismatch"));
         }
 
@@ -126,18 +133,28 @@ public class RazorpayWebhookController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "missing_payment_details"));
         }
         if (paymentAmount != null && paymentLinkAmount != null && paymentAmount.compareTo(paymentLinkAmount) != 0) {
+            log.warn("Razorpay payment rejected: payment/link amount mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "amount_mismatch"));
         }
         if (paymentAmount != null && orderAmount != null && paymentAmount.compareTo(orderAmount) != 0) {
+            log.warn("Razorpay payment rejected: payment/order amount mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "amount_mismatch"));
         }
         if (amount.compareTo(request.getRequestedAmount()) != 0) {
+            log.warn("Razorpay payment rejected: amount mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "amount_mismatch"));
         }
         if (!request.getCurrency().equalsIgnoreCase(currency)) {
+            log.warn("Razorpay payment rejected: request currency mismatch requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "currency_mismatch"));
         }
         if (!"INR".equalsIgnoreCase(currency)) {
+            log.warn("Razorpay payment rejected: unsupported currency requestId={} providerReference={}",
+                    mask(request.getIdempotencyKey()), mask(providerReference));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("status", "currency_mismatch"));
         }
 
@@ -187,6 +204,12 @@ public class RazorpayWebhookController {
         } catch (Exception ex) {
             return false;
         }
+    }
+
+    private static String mask(String value) {
+        if (value == null || value.isBlank()) return "unknown";
+        int suffixLength = Math.min(4, value.length());
+        return "***" + value.substring(value.length() - suffixLength);
     }
 
     private JsonNode entityFrom(JsonNode payloadNode, String fieldName) {

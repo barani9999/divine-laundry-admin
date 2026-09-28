@@ -5,5 +5,6 @@ public enum WhatsappDeliveryStatus {
     PENDING,
     SENT,
     DELIVERED,
+    READ,
     FAILED
 }

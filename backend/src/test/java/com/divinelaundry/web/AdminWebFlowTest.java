@@ -16,6 +16,9 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.UUID;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -50,6 +53,38 @@ class AdminWebFlowTest {
         mvc.perform(get("/").session(session)).andExpect(status().isOk());
         mvc.perform(post("/logout").session(session).with(csrf())).andExpect(redirectedUrl("/login?logout"));
     }
+
+        @Test void dashboardRendersBusinessDateKpisOrdersAndCollectionActions() throws Exception {
+                String dateContext = LocalDate.now(ZoneId.of("Asia/Kolkata"))
+                                .format(DateTimeFormatter.ofPattern("dd MMM yyyy · EEEE", Locale.ENGLISH));
+                var dashboard = mvc.perform(get("/").with(user("admin").roles("ADMIN")))
+                                .andExpect(status().isOk())
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("Today's operations")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString(dateContext)))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("Today's orders")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("Ready for delivery")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("Recent orders")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("Collection health")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("View outstanding")))
+                                .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/reports/outstanding\"")))
+                                .andReturn();
+                        String html = dashboard.getResponse().getContentAsString();
+                        assertThat(html).contains("class=\"dashboard-kpi kpi-");
+                        assertThat(html.split("class=\"dashboard-kpi kpi-", -1)).hasSize(7);
+                        assertThat(html).doesNotContain(".00</strong>");
+        }
+
+                @Test void newOrderRendersSeparateQuantityPiecesEstimateAndActionColumns() throws Exception {
+                        mvc.perform(get("/orders/new").with(user("admin").roles("ADMIN")))
+                                        .andExpect(status().isOk())
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                                                        "class=\"ticket-head\"><span>Service</span><span>Qty / KG</span><span>Pieces</span><span>Estimate</span><span>Action</span>")))
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-target=\"quantity\"")))
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-target=\"pieces\"")))
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString("class=\"empty-ticket\"")))
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-step=\"up\"")))
+                                        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-step=\"down\"")));
+                }
 
         @Test void reportsCenterAndReportRoutesRender() throws Exception {
                 mvc.perform(get("/reports").with(user("admin").roles("ADMIN")))

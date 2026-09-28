@@ -77,6 +77,7 @@ class PaymentRequestControllerTest {
                         .content("{\"amount\":1000.00,\"idempotencyKey\":\"req-1000\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderNumber").value("SO-2026-000101"))
+                .andExpect(jsonPath("$.paymentRequestReference").value("req-1000"))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.provider").value("mock-local"))
                 .andExpect(jsonPath("$.paymentUrl").value("mock-local://payment/MOCK-REF-100"))

@@ -453,6 +453,59 @@ class PaymentRequestServiceTest {
     }
 
     @Test
+    void verifiedPaidAmountMismatchDoesNotRecordPayment() {
+        PaymentRequestRepository requests = mock(PaymentRequestRepository.class);
+        LaundryOrderRepository orders = mock(LaundryOrderRepository.class);
+        PaymentService paymentService = mock(PaymentService.class);
+        PaymentProvider provider = mock(PaymentProvider.class);
+        PaymentRequestService service = new PaymentRequestService(requests, orders, paymentService, provider);
+        LaundryOrder order = order("SO-2026-000012-PAID-MISMATCH", new BigDecimal("100.00"));
+        PaymentRequest request = new PaymentRequest(order, new BigDecimal("80.00"), "INR", "mock-local",
+                "admin", "req-paid-mismatch");
+        request.markPending("MOCK-REF-PAID-MISMATCH", Instant.now().plusSeconds(600));
+        when(requests.findByProviderReference("MOCK-REF-PAID-MISMATCH")).thenReturn(Optional.of(request));
+        when(provider.verifyPayment("MOCK-REF-PAID-MISMATCH", new BigDecimal("80.00"), "INR"))
+                .thenReturn(new PaymentProvider.ProviderPaymentResponse("mock-local", "MOCK-REF-PAID-MISMATCH",
+                        "MOCK-PAY-PAID-MISMATCH", new BigDecimal("80.00"), new BigDecimal("79.99"), "INR",
+                        PaymentRequestStatus.PAID, null, null, null, Instant.now()));
+
+        assertThatThrownBy(() -> service.confirmVerifiedPayment(order.getOrderNumber(),
+                "MOCK-REF-PAID-MISMATCH", new BigDecimal("80.00"), "INR", "admin"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("paid amount mismatch");
+
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.PENDING);
+        verify(paymentService, never()).record(any(PaymentService.RecordPaymentCommand.class));
+    }
+
+    @Test
+    void providerVerifiedFailureMarksRequestFailedWithoutRecordingPayment() {
+        PaymentRequestRepository requests = mock(PaymentRequestRepository.class);
+        LaundryOrderRepository orders = mock(LaundryOrderRepository.class);
+        PaymentService paymentService = mock(PaymentService.class);
+        PaymentProvider provider = mock(PaymentProvider.class);
+        PaymentRequestService service = new PaymentRequestService(requests, orders, paymentService, provider);
+        LaundryOrder order = order("SO-2026-000012-FAILED", new BigDecimal("100.00"));
+        PaymentRequest request = new PaymentRequest(order, new BigDecimal("80.00"), "INR", "mock-local",
+                "admin", "req-provider-failed");
+        request.markPending("MOCK-REF-FAILED", Instant.now().plusSeconds(600));
+        when(requests.findByProviderReference("MOCK-REF-FAILED")).thenReturn(Optional.of(request));
+        when(provider.verifyPayment("MOCK-REF-FAILED", new BigDecimal("80.00"), "INR"))
+                .thenReturn(new PaymentProvider.ProviderPaymentResponse("mock-local", "MOCK-REF-FAILED",
+                        null, new BigDecimal("80.00"), BigDecimal.ZERO, "INR", PaymentRequestStatus.FAILED,
+                        null, null, "Provider reports failed", Instant.now()));
+        when(requests.save(any(PaymentRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> service.confirmVerifiedPayment(order.getOrderNumber(),
+                "MOCK-REF-FAILED", new BigDecimal("80.00"), "INR", "admin"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Provider reports failed");
+
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.FAILED);
+        verify(paymentService, never()).record(any(PaymentService.RecordPaymentCommand.class));
+    }
+
+    @Test
     void providerCurrencyMismatchRejected() {
         PaymentRequestService service = createService();
         LaundryOrder order = order("SO-2026-000013", new BigDecimal("100.00"));
